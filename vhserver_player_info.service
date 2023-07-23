@@ -1,0 +1,19 @@
+# /etc/systemd/system/vhserver_player_info.service
+
+[Unit]
+Description=Valheim Player Info Service
+After=network.target
+
+[Service]
+User=vhserver
+Group=vhserver
+WorkingDirectory=/home/vhserver/player_info
+Environment="PATH=/home/vhserver/player_info/venv/bin"
+ExecStart=/home/vhserver/player_info/venv/bin/python3 vhserver_player_info.py
+StandardOutput=append:/home/vhserver/player_info/player_info_output.log
+StandardError=append:/home/vhserver/player_info/player_info_error.log
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
