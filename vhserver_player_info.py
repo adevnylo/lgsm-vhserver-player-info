@@ -7,6 +7,10 @@ import requests
 import signal
 from datetime import datetime
 
+# User-configurable variables
+STEAM_API_KEY = "YOUR_STEAM_API_KEY"
+LOG_FILE_PATH = "/home/vhserver/log/console/vhserver-console.log" # Edit only if you changed the default log file from the LGSM launch parameters.
+
 # Function to create and activate the virtual environment
 def create_virtualenv():
     try:
@@ -29,7 +33,7 @@ def process_log_file(log_file, api_key):
     # If last_check_time is None, set it to the current time
     if last_check_time is None:
         last_check_time = datetime.now()
-        
+
     # Check if player_info.json exists and load its content
     if os.path.exists("player_info.json") and os.path.getsize("player_info.json") > 0:
         with open("player_info.json", "r") as f:
@@ -45,12 +49,14 @@ def process_log_file(log_file, api_key):
         player_steamID = None
         player_name = None
         player_steam_name = None
+        time_last_seen = None
 
         # Iterate through each line in the log file
         for line in lines:
             # Check if the line contains "received local Platform ID Steam_"
             if "received local Platform ID Steam_" in line:
                 player_steamID = line.split("received local Platform ID Steam_")[1][:17]
+                time_last_seen = datetime.strptime(line[:19], "%m/%d/%Y %H:%M:%S")  # Set time_last_seen to the first 19 characters of the log line
 
             # Check if the line contains "Got character ZDOID from"
             elif "Got character ZDOID from" in line:
@@ -59,14 +65,15 @@ def process_log_file(log_file, api_key):
                 # Use the Steam API to get the Steam nickname
                 player_steam_name = get_steam_nickname(player_steamID, api_key)
 
-                # Check if the player_steamID is already processed
-                if not is_steamID_processed(player_steamID, player_info_data):
+                # Check if the player_steamID is already processed with the same time_last_seen
+                if not is_steamID_processed(player_steamID, time_last_seen, player_info_data):
                     # Create a dictionary with player info and append it to player_info_data
                     player_info = {
                         "player_serial": len(player_info_data) + 1,
                         "player_name": player_name,
                         "player_steamID": player_steamID,
-                        "player_steam_name": player_steam_name
+                        "player_steam_name": player_steam_name,
+                        "time_last_seen": time_last_seen
                     }
                     player_info_data.append(player_info)
 
@@ -79,7 +86,8 @@ def process_log_file(log_file, api_key):
                         "player_serial": len(player_info_data) + 1,
                         "player_name": f"{player_name}_{len(player_info_data) + 1}",
                         "player_steamID": player_steamID,
-                        "player_steam_name": player_steam_name
+                        "player_steam_name": player_steam_name,
+                        "time_last_seen": time_last_seen
                     })
                     print(f"Player {player_steamID} already exists with a different name. Adding new entry.")
 
@@ -102,7 +110,7 @@ def read_last_check_time():
     if os.path.exists("last_check_time.json") and os.path.getsize("last_check_time.json") > 0:
         with open("last_check_time.json", "r") as f:
             data = json.load(f)
-            return datetime.strptime(data["last_check_time"], "%m/%d/%Y %H:%M:%S")
+            return datetime.strptime(data.get("last_check_time"), "%m/%d/%Y %H:%M:%S")
     return None
 
 # Function to get the Steam nickname using the Steam API
@@ -116,10 +124,10 @@ def get_steam_nickname(steamID, api_key):
         print(f"Failed to fetch Steam nickname for SteamID {steamID}: {e}")
         return "Unknown"
 
-# Function to check if a player_steamID is already processed
-def is_steamID_processed(steamID, player_info_data):
+# Function to check if a player_steamID is already processed with the same time_last_seen
+def is_steamID_processed(steamID, time_last_seen, player_info_data):
     for player_info in player_info_data:
-        if player_info["player_steamID"] == steamID:
+        if player_info["player_steamID"] == steamID and player_info.get("time_last_seen") == time_last_seen:
             return True
     return False
 
@@ -127,7 +135,7 @@ def is_steamID_processed(steamID, player_info_data):
 def get_steam_name_for_steamID(steamID, player_info_data):
     for player_info in player_info_data:
         if player_info["player_steamID"] == steamID:
-            return player_info["player_steam_name"]
+            return player_info.get("player_steam_name")
     return None
 
 # Function to get the time from a log line
@@ -140,10 +148,11 @@ def get_log_time(line):
 
 # Function to print player info
 def print_player_info(player_info):
-    print(f"Player Serial: {player_info['player_serial']}")
-    print(f"Player Name: {player_info['player_name']}")
-    print(f"Player SteamID: {player_info['player_steamID']}")
-    print(f"Player Steam Name: {player_info['player_steam_name']}")
+    print(f"Player Serial: {player_info.get('player_serial', 'N/A')}")
+    print(f"Player Name: {player_info.get('player_name', 'N/A')}")
+    print(f"Player SteamID: {player_info.get('player_steamID', 'N/A')}")
+    print(f"Player Steam Name: {player_info.get('player_steam_name', 'N/A')}")
+    print(f"Time Last Seen: {player_info.get('time_last_seen', 'N/A')}")
     print()
 
 # Function to handle SIGTERM and SIGINT signals
@@ -168,11 +177,10 @@ def main():
     signal.signal(signal.SIGTERM, handle_signals)
     signal.signal(signal.SIGINT, handle_signals)
 
-    # Set the log file path
-    log_file = "/home/vhserver/log/console/vhserver-console.log"
-
-    # Set your actual Steam API key here
-    api_key = "YOUR_STEAM_API_KEY"
+    # Check if the script was run by systemd or with the "--list" parameter
+    if not os.path.basename(sys.argv[0]) == "systemd" and len(sys.argv) == 1:
+        # If not run by systemd and no other arguments provided, execute "--list" by default
+        sys.argv.append("--list")
 
     # Check if the script was run with the "--list" parameter
     if len(sys.argv) > 1 and sys.argv[1] == "--list":
@@ -187,8 +195,8 @@ def main():
     else:
         # Check and process the log file every 10 minutes
         while True:
-            if os.path.exists(log_file):
-                process_log_file(log_file, api_key)
+            if os.path.exists(LOG_FILE_PATH):
+                process_log_file(LOG_FILE_PATH, STEAM_API_KEY)
             time.sleep(600)
 
 if __name__ == "__main__":
