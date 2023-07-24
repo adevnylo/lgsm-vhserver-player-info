@@ -4,7 +4,7 @@
 log() {
     echo $1
     echo ""
-    echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> vhserver_player_info_install_log.txt
+    echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> vhserver_player_info_install.log
 }
 
 # Check if the script is run as root
@@ -42,12 +42,13 @@ chmod +x /home/vhserver/player_info/vhserver_player_info.py
 log 'File "vhserver_player_info.py" copied to the player_info folder and made it executable'
 
 # Create empty files inside the 'player_info' folder
-touch /home/vhserver/player_info/player_info.json
+touch /home/vhserver/player_info/player_database.json
 touch /home/vhserver/player_info/last_check_time.json
-touch /home/vhserver/player_info/player_info_error.log
-touch /home/vhserver/player_info/player_info_output.log
-chmod 0644 /home/vhserver/player_info/player_info_output.log
-log 'Created 4 empty files ("player_info.json", "last_check_time.json", "player_info_error.log", and "player_info_output.log") inside the player_info folder, which will be used by vhserver_player_info.py'
+touch /home/vhserver/player_info/vhserver_player_info.log
+touch /home/vhserver/player_info/vhserver_player_info_service_error.log
+touch /home/vhserver/player_info/vhserver_player_info_service_output.log
+chmod 0644 /home/vhserver/player_info/vhserver_player_info_service_output.log
+log 'Created 5 empty files ("player_database.json", "last_check_time.json", "vhserver_player_info.log", "vhserver_player_info_service_error.log", and "vhserver_player_info_service_output.log") inside the player_info folder, which will be used by vhserver_player_info.py'
 
 # Set ownership for all files inside the 'player_info' folder to 'vhserver:vhserver'
 chown vhserver:vhserver /home/vhserver/player_info/*
@@ -75,4 +76,7 @@ systemctl enable vhserver_player_info.service
 systemctl start vhserver_player_info.service
 
 log "Installation completed successfully!"
-echo "You can now delete the downloaded files."
+echo "You can print your Valheim server's player database by running:"
+echo ""
+echo "python3 /home/vhserver/player_info/vhserver_player_info.py"
+echo ""
